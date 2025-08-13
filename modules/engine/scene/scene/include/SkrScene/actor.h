@@ -6,6 +6,8 @@
 #include "SkrRT/ecs/component.hpp"
 #include "SkrRT/resource/resource_handle.h"
 #include "SkrRT/ecs/world.hpp"
+#include "SkrRTTR/rttr_traits.hpp"
+#include "SkrRTTR/type.hpp"
 #include "SkrSceneCore/scene_components.h"
 #include "SkrRenderer/render_mesh.h"
 
@@ -16,13 +18,15 @@
 namespace skr
 {
 
-sreflect_enum_class(guid = "a1ebd9b1-900c-44f4-b381-0dd48014718d")
+sreflect_enum_class(
+    guid = "a1ebd9b1-900c-44f4-b381-0dd48014718d")
 EAttachRule{
     Default = 0,
     KeepWorldTransform = 0x01
 };
 
-sreflect_enum_class(guid = "0198367e-d3a5-70ac-b97a-36460d05641a")
+sreflect_enum_class(
+    guid = "0198367e-d3a5-70ac-b97a-36460d05641a")
 EActorType{
     Default = 0,
     Mesh = 1,
@@ -31,18 +35,23 @@ EActorType{
 };
 
 sreflect_struct(
-    guid = "4cb20865-0d27-43ee-90b9-7b43ac4c067c")
+    guid = "4cb20865-0d27-43ee-90b9-7b43ac4c067c";
+    rttr = @enable;
+    rttr.reflect_ctors = true;)
 SKR_SCENE_API Actor
 {
     friend class ActorManager;
 
 public:
+    SKR_GENERATE_BODY()
     SKR_RC_IMPL();
+
+    Actor() SKR_NOEXCEPT;
 
     virtual ~Actor() SKR_NOEXCEPT;
     static RCWeak<Actor> GetRoot();
-    static RCWeak<Actor> CreateActor(EActorType type = EActorType::Default);
 
+    void BindWorld(skr::ecs::World * world) { this->world = world; }
     void CreateEntity();
     skr::ecs::Entity GetEntity() const;
     void AttachTo(RCWeak<Actor> parent, EAttachRule rule = EAttachRule::Default);
@@ -71,19 +80,31 @@ public:
         RunF f;
     };
     Spawner spawner;
+    skr::ecs::World* world = nullptr; // Pointer to the ECS world for actor management
 
     // getters & setters
-    inline const skr::String& GetDisplayName() const { return display_name; }
+    inline const skr::String GetDisplayName() const { return display_name; }
     inline void SetDisplayName(const skr::String& name) { display_name = name; }
     inline EActorType GetActorType() const { return actor_type; }
-    skr::scene::ScaleComponent* GetScaleComponent() const;
-    skr::scene::PositionComponent* GetPositionComponent() const;
-    skr::scene::RotationComponent* GetRotationComponent() const;
-    skr::scene::TransformComponent* GetTransformComponent() const;
-    skr::GUID GetGUID() const { return guid; }
 
-protected:
-    explicit Actor(EActorType type = EActorType::Default) SKR_NOEXCEPT;
+    template <typename ComponentType>
+    ComponentType* GetComponent() const
+    {
+        auto entity = GetEntity();
+        if (entity != skr::ecs::Entity{ SUGOI_NULL_ENTITY })
+        {
+            return world->random_readwrite<ComponentType>().get(entity);
+        }
+        SKR_LOG_ERROR(u8"Actor {%s} has no valid entity to get Component", display_name.c_str());
+        return nullptr;
+    }
+
+    // skr::scene::ScaleComponent* GetScaleComponent() const;
+    // skr::scene::PositionComponent* GetPositionComponent() const;
+    // skr::scene::RotationComponent* GetRotationComponent() const;
+    // skr::scene::TransformComponent* GetTransformComponent() const;
+
+    skr::GUID GetGUID() const { return guid; }
 
     skr::String display_name;             // for editor, profiler, and runtime dump
     skr::GUID guid = skr::GUID::Create(); // guid for each actor, used to identify actors in the scene
@@ -105,7 +126,23 @@ public:
     void initialize(skr::ecs::World* world);
     void finalize();
 
-    skr::RCWeak<Actor> CreateActor(EActorType type = EActorType::Default);
+    template <typename T>
+    skr::RCWeak<Actor> CreateActor()
+    {
+        auto actor = CreateActorInstance<T>();
+        actor.get()->BindWorld(world);
+        actors.add(actor->guid, actor);
+        return actor;
+    }
+    template <typename T>
+    skr::RC<Actor> CreateActorInstance()
+    {
+        RTTRType* ActorType = skr::type_of<T>();
+        void* actor_data = sakura_malloc_aligned(ActorType->size(), ActorType->alignment()); // TODO: leak?
+        ActorType->find_default_ctor().invoke(actor_data);                                   // TODO: pooling ?
+        return skr::RC<Actor>(reinterpret_cast<Actor*>(actor_data));
+    }
+
     bool DestroyActor(skr::GUID guid);
     void CreateActorEntity(skr::RCWeak<Actor> actor);
     void DestroyActorEntity(skr::RCWeak<Actor> actor);
@@ -116,17 +153,16 @@ public:
 
     // accessors
     // TODO: we need a better way to manage these accessors
-    skr::ecs::RandomComponentReadWrite<skr::scene::ParentComponent> parent_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::scene::ChildrenComponent> children_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::scene::PositionComponent> pos_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::scene::RotationComponent> rot_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::scene::ScaleComponent> scale_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::scene::TransformComponent> trans_accessor;
-    skr::ecs::RandomComponentReadWrite<skr::renderer::MeshComponent> mesh_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::ParentComponent> parent_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::ChildrenComponent> children_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::PositionComponent> pos_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::RotationComponent> rot_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::ScaleComponent> scale_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::scene::TransformComponent> trans_accessor;
+    // skr::ecs::RandomComponentReadWrite<skr::renderer::MeshComponent> mesh_accessor;
 
 protected:
     // Factory method to create specific actor types
-    virtual skr::RC<Actor> CreateActorInstance(EActorType type);
 
 private:
     ActorManager() = default;
@@ -147,33 +183,37 @@ private:
 };
 
 sreflect_struct(
-    guid = "01987a21-a2b4-7488-924d-17639e937f87")
+    guid = "01987a21-a2b4-7488-924d-17639e937f87";
+    rttr = @enable;
+    rttr.reflect_ctors = true;)
 SKR_SCENE_API MeshActor : public Actor
 {
     friend class ActorManager;
 
 public:
+    SKR_GENERATE_BODY()
     SKR_RC_IMPL();
 
     ~MeshActor() SKR_NOEXCEPT;
     skr::renderer::MeshComponent* GetMeshComponent() const;
 
-protected:
     MeshActor();
 };
 
 sreflect_struct(
-    guid = "01987a21-e796-76b6-89c4-fb550edf5610")
+    guid = "01987a21-e796-76b6-89c4-fb550edf5610";
+    rttr = @enable;
+    rttr.reflect_ctors = true;)
 SKR_SCENE_API SkelMeshActor : public MeshActor
 {
     friend class ActorManager;
 
 public:
+    SKR_GENERATE_BODY()
     SKR_RC_IMPL();
 
     ~SkelMeshActor() SKR_NOEXCEPT override;
 
-protected:
     SkelMeshActor();
 };
 

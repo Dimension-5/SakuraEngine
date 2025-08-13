@@ -193,6 +193,7 @@ void GPUScene::AdjustBuffer(skr::render_graph::RenderGraph* graph)
         uint32_t new_capacity = static_cast<uint32_t>(required_instances * config.resize_growth_factor);
         
         // Resize and get old buffer
+        cgpu_wait_queue_idle(render_device->get_gfx_queue());
         auto old_buffer = core_data.resize(new_capacity);
         scene_buffer = core_data.import_buffer(graph, u8"scene_buffer");
         if (old_buffer && core_data.get_buffer())
@@ -222,19 +223,19 @@ void GPUScene::CreateDataBuffer(CGPUDeviceId device, const GPUSceneConfig& confi
 
     // Use Builder to create SOA allocator
     auto builder = SOASegmentBuffer::Builder(device)
-        .with_size(config.initial_size, config.max_size)
-        .allow_resize(config.enable_auto_resize);
+        .with_instances(config.initial_instances)
+        .with_page_size(config.page_size);
     
     // Register core components
     for (const auto& component_type : component_types)
     {
         builder.add_component(
-            component_type.gpu_type_id,
+            component_type.soa_index,
             component_type.element_size,
             component_type.element_align
         );
-        SKR_LOG_DEBUG(u8"  Added core component to SOASegmentBuffer: gpu_type_id=%u, size=%u, align=%u",
-            component_type.gpu_type_id, component_type.element_size, component_type.element_align);
+        SKR_LOG_DEBUG(u8"  Added core component to SOASegmentBuffer: local_id=%u, size=%u, align=%u",
+            component_type.soa_index, component_type.element_size, component_type.element_align);
     }
     
     // Build the allocator
@@ -250,15 +251,6 @@ void GPUScene::CreateDataBuffer(CGPUDeviceId device, const GPUSceneConfig& confi
         core_data.get_capacity_bytes() / (1024 * 1024),
         core_data.get_segments().size(),
         core_data.get_instance_capacity());
-    
-    // 打印实际注册的组件类型
-    const auto& infos = core_data.get_infos();
-    SKR_LOG_INFO(u8"Registered %u core components in SOASegmentBuffer:", (uint32_t)infos.size());
-    for (size_t i = 0; i < infos.size(); ++i)
-    {
-        SKR_LOG_INFO(u8"  Component[%u]: type_id=%u, size=%u, align=%u",
-            (uint32_t)i, infos[i].type_id, infos[i].element_size, infos[i].element_align);
-    }
 }
 
 void GPUScene::ExecuteUpload(skr::render_graph::RenderGraph* graph)
@@ -296,7 +288,6 @@ void GPUScene::ExecuteUpload(skr::render_graph::RenderGraph* graph)
             SkrZoneScopedN("GPUScene::ScanGPUScene");
             upload_ctx.DRAMCache.resize_unsafe(upload_ctx.upload_buffer->info->size);
             
-            // 预估分配大小
             uint64_t total_dirty_count = dirty_comp_count.load();
             upload_ctx.core_data_uploads.resize_unsafe(total_dirty_count);
             upload_ctx.additional_data_uploads.resize_unsafe(total_dirty_count);

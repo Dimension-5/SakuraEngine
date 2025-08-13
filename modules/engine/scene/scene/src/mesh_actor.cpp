@@ -17,7 +17,6 @@ MeshActor::~MeshActor() SKR_NOEXCEPT
 }
 
 MeshActor::MeshActor()
-    : Actor(EActorType::Mesh)
 {
     // Initialize the actor with default values
     display_name = u8"MeshActor";
@@ -47,7 +46,7 @@ skr::renderer::MeshComponent* MeshActor::GetMeshComponent() const
     auto entity = GetEntity();
     if (entity != skr::ecs::Entity{ SUGOI_NULL_ENTITY })
     {
-        return skr::ActorManager::GetInstance().mesh_accessor.get(entity);
+        return world->random_readwrite<renderer::MeshComponent>().get(entity);
     }
     SKR_LOG_ERROR(u8"MeshActor {%s} has no valid entity to get MeshComponent", display_name.c_str());
     return nullptr;

@@ -10,6 +10,7 @@
 #include "SkrProfile/profile.h"
 #include "SkrRT/io/ram_io.hpp"
 #include "SkrRT/misc/cmd_parser.hpp"
+#include "SkrRTTR/rttr_traits.hpp"
 
 #include <SkrOS/filesystem.hpp>
 #include "SkrCore/memory/impl/skr_new_delete.hpp"
@@ -285,7 +286,7 @@ int SceneSampleMeshModule::main_module_exec(int argc, char8_t** argv)
     constexpr int hierarchy_count = 3; // Number of actors in the hierarchy
 
     auto root = skr::Actor::GetRoot();
-    auto actor1 = skr::MeshActor::CreateActor(skr::EActorType::Mesh).cast_static<skr::MeshActor>();
+    auto actor1 = actor_manager.CreateActor<skr::MeshActor>().cast_static<skr::MeshActor>();
 
     actor1.lock()->SetDisplayName(u8"Actor 1");
 
@@ -294,14 +295,14 @@ int SceneSampleMeshModule::main_module_exec(int argc, char8_t** argv)
 
     actor1.lock()->AttachTo(root);
 
-    root.lock()->GetPositionComponent()->set({ 0.0f, 0.0f, 0.0f });
+    root.lock()->GetComponent<skr::scene::PositionComponent>()->set({ 0.0f, 0.0f, 0.0f });
 
-    actor1.lock()->GetPositionComponent()->set({ 0.0f, 1.0f, 0.0f });
-    actor1.lock()->GetScaleComponent()->set({ .1f, .1f, .1f });
-    actor1.lock()->GetRotationComponent()->set({ 0.0f, 0.0f, 0.0f });
+    actor1.lock()->GetComponent<skr::scene::PositionComponent>()->set({ 0.0f, 1.0f, 0.0f });
+    actor1.lock()->GetComponent<skr::scene::ScaleComponent>()->set({ .1f, .1f, .1f });
+    actor1.lock()->GetComponent<skr::scene::RotationComponent>()->set({ 0.0f, 0.0f, 0.0f });
     for (auto i = 0; i < hierarchy_count; ++i)
     {
-        auto actor = skr::MeshActor::CreateActor(skr::EActorType::Mesh).cast_static<skr::MeshActor>();
+        auto actor = actor_manager.CreateActor<skr::MeshActor>().cast_static<skr::MeshActor>();
         hierarchy_actors.push_back(actor);
 
         actor.lock()->SetDisplayName(skr::format(u8"Actor {}", i + 2).c_str());
@@ -315,8 +316,8 @@ int SceneSampleMeshModule::main_module_exec(int argc, char8_t** argv)
             actor.lock()->AttachTo(hierarchy_actors[i - 1]);
         }
 
-        actor.lock()->GetPositionComponent()->set({ 0.0f, 0.0f, (float)(i + 1) * 5.0f });
-        actor.lock()->GetScaleComponent()->set({ .8f, .8f, .8f });
+        actor.lock()->GetComponent<skr::scene::PositionComponent>()->set({ 0.0f, 0.0f, (float)(i + 1) * 5.0f });
+        actor.lock()->GetComponent<skr::scene::ScaleComponent>()->set({ .8f, .8f, .8f });
     }
 
     transform_system->update();
